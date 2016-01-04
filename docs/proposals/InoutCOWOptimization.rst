@@ -7,7 +7,7 @@
 :Authors: Dave Abrahams, Joe Groff
           
 :Summary: Our writeback model interacts with Copy-On-Write (COW) to
-          cause some surprising ineffiencies, such as O(N) performance
+          cause some surprising inefficiencies, such as O(N) performance
           for ``x[0][0] = 1``. We propose a modified COW optimization
           that recovers O(1) performance for these cases and supports
           the efficient use of slices in algorithm implementation.
@@ -51,7 +51,7 @@ could be written as follows:
   protocol Sliceable {
     ...
     @mutating
-    func quickSort(compare: (StreamType.Element, StreamType.Element)->Bool) {
+    func quickSort(compare: (StreamType.Element, StreamType.Element) -> Bool) {
       let (start,end) = (startIndex, endIndex)
       if start != end && start.succ() != end {
         let pivot = self[start]

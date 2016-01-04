@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -189,7 +189,7 @@ public protocol SequenceType {
   /// If `self` is multi-pass (i.e., a `CollectionType`), invoke
   /// `preprocess` on `self` and return its result.  Otherwise, return
   /// `nil`.
-  func _preprocessingPass<R>(preprocess: (Self)->R) -> R?
+  func _preprocessingPass<R>(@noescape preprocess: (Self) -> R) -> R?
 
   /// Create a native array buffer containing the elements of `self`,
   /// in the same order.
@@ -240,7 +240,7 @@ internal class _DropFirstSequence<Base : GeneratorType>
         dropped = limit
         return nil
       }
-      ++dropped
+      dropped += 1
     }
     return generator.next()
   }
@@ -270,7 +270,7 @@ internal class _PrefixSequence<Base : GeneratorType> : SequenceType, GeneratorTy
 
   internal func next() -> Base.Element? {
     if taken >= maxLength { return nil }
-    ++taken
+    taken += 1
 
     if let next = generator.next() {
       return next
@@ -516,7 +516,7 @@ extension SequenceType {
     return 0
   }
 
-  public func _preprocessingPass<R>(preprocess: (Self)->R) -> R? {
+  public func _preprocessingPass<R>(@noescape preprocess: (Self) -> R) -> R? {
     return nil
   }
 
@@ -613,7 +613,8 @@ extension SequenceType {
     -> UnsafeMutablePointer<Generator.Element> {
     var p = UnsafeMutablePointer<Generator.Element>(ptr)
     for x in GeneratorSequence(self.generate()) {
-      p++.initialize(x)
+      p.initialize(x)
+      p += 1
     }
     return p
   }

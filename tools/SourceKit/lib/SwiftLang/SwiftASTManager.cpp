@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -25,7 +25,7 @@
 #include "swift/Frontend/PrintingDiagnosticConsumer.h"
 #include "swift/Strings.h"
 #include "swift/Subsystems.h"
-#include "swift/SILPasses/Passes.h"
+#include "swift/SILOptimizer/PassManager/Passes.h"
 // This is included only for createLazyResolver(). Move to different header ?
 #include "swift/Sema/CodeCompletionTypeChecking.h"
 
@@ -364,6 +364,8 @@ static void sanitizeCompilerArgs(ArrayRef<const char *> Args,
       continue;
     if (Arg == "-Xfrontend")
       continue;
+    if (Arg == "-embed-bitcode")
+      continue;
     NewArgs.push_back(CArg);
   }
 }
@@ -676,7 +678,7 @@ static void collectModuleDependencies(Module *TopMod,
     Module *Mod = Import.second;
     if (Mod->isSystemModule())
       continue;
-    // FIXME: Setup dependecies on the included headers.
+    // FIXME: Setup dependencies on the included headers.
     if (ClangModuleLoader &&
         Mod == ClangModuleLoader->getImportedHeaderModule())
       continue;

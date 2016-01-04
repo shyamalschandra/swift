@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -41,7 +41,7 @@ public:
 
   /// Return true if the other dominator tree does not match this dominator
   /// tree.
-  inline bool errorOccuredOnComparison(const DominanceInfo &Other) const {
+  inline bool errorOccurredOnComparison(const DominanceInfo &Other) const {
     const auto *R = getRootNode();
     const auto *OtherR = Other.getRootNode();
 
@@ -131,7 +131,7 @@ public:
 
   /// Return true if the other dominator tree does not match this dominator
   /// tree.
-  inline bool errorOccuredOnComparison(const PostDominanceInfo &Other) const {
+  inline bool errorOccurredOnComparison(const PostDominanceInfo &Other) const {
     const auto *R = getRootNode();
     const auto *OtherR = Other.getRootNode();
 

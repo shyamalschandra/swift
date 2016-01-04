@@ -35,15 +35,15 @@ Here is how to dump the IR after the main phases of the swift compiler
   get what you want to see.
 
 #. **Performance SIL passes**. To print the SIL after the complete SIL
-   oprimization pipeline::
+   optimization pipeline::
 
-    swiftc -emit-sil -O file-swift
+    swiftc -emit-sil -O file.swift
 
 #. **IRGen**. To print the LLVM IR after IR generation::
 
     swiftc -emit-ir -Xfrontend -disable-llvm-optzns -O file.swift
 
-4. **LLVM passes**. To print the LLVM IR afer LLVM passes::
+4. **LLVM passes**. To print the LLVM IR after LLVM passes::
 
     swiftc -emit-ir -O file.swift
 
@@ -63,7 +63,7 @@ Debugging on SIL Level
 Options for Dumping the SIL
 ```````````````````````````
 
-Often it is not sufficient to dump the SIL at the begin or end of the
+Often it is not sufficient to dump the SIL at the beginning or end of the
 optimization pipeline.
 The SILPassManager supports useful options to dump the SIL also between
 pass runs.
@@ -136,7 +136,7 @@ and check for the function name in the breakpoint condition::
 
     (lldb) br set -c 'hasName("_TFC3nix1Xd")' -f SILFunction.cpp -l 91
 
-Sometimes you want to know which optimization does insert, remove or move a
+Sometimes you may want to know which optimization inserts, removes or moves a
 certain instruction. To find out, set a breakpoint in
 ``ilist_traits<SILInstruction>::addNodeToList`` or
 ``ilist_traits<SILInstruction>::removeNodeFromList``, which are defined in
@@ -235,7 +235,7 @@ Then by running ``lldb test -s test.lldb``, lldb will:
    the function that the function pointer was passed to.
 
 Using LLDB scripts can enable one to use complex debugger workflows without
-needing to retype the various commands perfectly everytime.
+needing to retype the various commands perfectly every time.
 
 Debugging Swift Executables
 ---------------------------

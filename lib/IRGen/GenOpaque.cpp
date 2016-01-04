@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -183,6 +183,19 @@ static llvm::Type *createWitnessType(IRGenModule &IGM, ValueWitness index) {
       ->getPointerTo();
   }
 
+  /// void (*destructiveInjectEnumTag)(T *obj, unsigned tag, M *self);
+  case ValueWitness::DestructiveInjectEnumTag: {
+    llvm::Type *voidTy = IGM.VoidTy;
+    llvm::Type *ptrTy = IGM.OpaquePtrTy;
+    llvm::Type *indexTy = IGM.Int32Ty;
+    llvm::Type *metaTy = IGM.TypeMetadataPtrTy;
+
+    llvm::Type *args[] = {ptrTy, indexTy, metaTy};
+
+    return llvm::FunctionType::get(voidTy, args, /*isVarArg*/ false)
+      ->getPointerTo();
+  }
+
   case ValueWitness::Size:
   case ValueWitness::Flags:
   case ValueWitness::Stride:
@@ -256,6 +269,8 @@ static StringRef getValueWitnessLabel(ValueWitness index) {
     return "getEnumTag";
   case ValueWitness::DestructiveProjectEnumData:
     return "destructiveProjectEnumData";
+  case ValueWitness::DestructiveInjectEnumTag:
+    return "destructiveInjectEnumTag";
   }
   llvm_unreachable("bad value witness index");
 }
@@ -675,6 +690,23 @@ void irgen::emitDestructiveProjectEnumDataCall(IRGenFunction &IGF,
                                       ValueWitness::DestructiveProjectEnumData);
   llvm::CallInst *call =
     IGF.Builder.CreateCall(fn, {srcObject, metadata});
+  call->setCallingConv(IGF.IGM.RuntimeCC);
+  setHelperAttributes(call);
+}
+
+/// Emit a call to the 'destructiveInjectEnumTag' operation.
+/// The type must be dynamically known to have enum witnesses.
+void irgen::emitDestructiveInjectEnumTagCall(IRGenFunction &IGF,
+                                             SILType T,
+                                             unsigned tag,
+                                             llvm::Value *srcObject) {
+  auto metadata = IGF.emitTypeMetadataRefForLayout(T);
+  llvm::Value *fn = IGF.emitValueWitnessForLayout(T,
+                                      ValueWitness::DestructiveInjectEnumTag);
+  llvm::Value *tagValue =
+    llvm::ConstantInt::get(IGF.IGM.Int32Ty, tag);
+  llvm::CallInst *call =
+    IGF.Builder.CreateCall(fn, {srcObject, tagValue, metadata});
   call->setCallingConv(IGF.IGM.RuntimeCC);
   setHelperAttributes(call);
 }

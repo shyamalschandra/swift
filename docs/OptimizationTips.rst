@@ -54,8 +54,8 @@ this mode will most likely take longer to compile, but may run faster.
 This mode can be enabled using the Xcode build setting 'Whole Module Optimization'.
 
 
-Limiting Language Dynamicism
-============================
+Reducing Dynamic Dispatch
+=========================
 
 Swift by default is a very dynamic language like Objective-C. Unlike Objective
 C, Swift gives the programmer the ability to improve runtime performance when
@@ -137,12 +137,12 @@ Advice: Use 'private' when declaration does not need to be accessed outside of f
 
 Applying the ``private`` keyword to a declaration restricts the visibility of
 the declaration to the file in which it is declared. This allows the compiler to
-be able to ascertain all other potentially overridding declarations. Thus the
+be able to ascertain all other potentially overriding declarations. Thus the
 absence of any such declarations enables the compiler to infer the ``final``
 keyword automatically and remove indirect calls for methods and field accesses
 accordingly. For instance in the following, ``e.doSomething()`` and
 ``f.myPrivateVar``, will be able to be accessed directly assuming ``E``, ``F``
-do not have any overridding declarations in the same file:
+do not have any overriding declarations in the same file:
 
 ::
 
@@ -176,7 +176,7 @@ Advice: Use value types in Array
 
 In Swift, types can be divided into two different categories: value types
 (structs, enums, tuples) and reference types (classes). A key distinction is
-that value types can not be included inside an NSArray. Thus when using value
+that value types cannot be included inside an NSArray. Thus when using value
 types, the optimizer can remove most of the overhead in Array that is necessary
 to handle the possibility of the array being backed an NSArray.
 
@@ -265,7 +265,7 @@ Swift eliminates integer overflow bugs by checking for overflow when performing
 normal arithmetic. These checks are not appropriate in high performance code
 where one knows that no memory safety issues can result.
 
-Advice: Use unchecked integer arithmetic when you can prove that overflow can not occur
+Advice: Use unchecked integer arithmetic when you can prove that overflow cannot occur
 ---------------------------------------------------------------------------------------
 
 In performance-critical code you can elide overflow checks if you know it is
@@ -446,7 +446,7 @@ argument drops from being O(n), depending on the size of the tree to O(1).
 
 ::
 
-  struct tree : P {
+  struct Tree : P {
     var node : [P?]
     init() {
       node = [ thing ]
@@ -557,6 +557,7 @@ If it makes sense to limit the adoption of protocols to classes then mark
 protocols as class-only protocols to get better runtime performance.
 
 ::
+
   protocol Pingable : class { func ping() -> Int }
 
 .. https://developer.apple.com/library/ios/documentation/Swift/Conceptual/Swift_Programming_Language/Protocols.html

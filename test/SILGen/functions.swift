@@ -53,8 +53,8 @@ func curried_function_returns_function(x: Int)(y: Int) -> (z:Int) -> Int {
   return { z in standalone_function(standalone_function(x, y), z) }
 }
 // -- Local function has extra uncurry level with context
-// CHECK-LABEL: sil shared @_TFF9functions33curried_function_returns_function{{.*}} : $@convention(thin) (Builtin.Int64, @owned @box Builtin.Int64, @inout Builtin.Int64, @owned @box Builtin.Int64, @inout Builtin.Int64) -> Builtin.Int64
-// bb0(%0 : $@box Builtin.Int64, %1 : $*Builtin.Int64, %2 : $@box Builtin.Int64, %3 : $*Builtin.Int64, %4 : $Builtin.Int64):
+// CHECK-LABEL: sil shared @_TFF9functions33curried_function_returns_function{{.*}} : $@convention(thin) (Builtin.Int64, @owned @box Builtin.Int64, @owned @box Builtin.Int64) -> Builtin.Int64
+// bb0(%0 : $@box Builtin.Int64, %1 : $@box Builtin.Int64, %4 : $Builtin.Int64):
 
 struct SomeStruct {
   // -- Constructors and methods are uncurried in 'self'
@@ -327,14 +327,14 @@ func calls(i: Int, j: Int, k: Int) {
 
   // CHECK: [[C:%[0-9]+]] = load [[CADDR]]
   // CHECK: [[I:%[0-9]+]] = load [[IADDR]]
-  // CHECK: [[SETTER:%[0-9]+]] = class_method [[C]] : $SomeClass, #SomeClass.someProperty!setter.1 : SomeClass -> (Builtin.Int64) -> ()
+  // CHECK: [[SETTER:%[0-9]+]] = class_method [[C]] : $SomeClass, #SomeClass.someProperty!setter.1 : (SomeClass) -> (Builtin.Int64) -> ()
   // CHECK: apply [[SETTER]]([[I]], [[C]])
   c.someProperty = i
 
   // CHECK: [[C:%[0-9]+]] = load [[CADDR]]
   // CHECK: [[J:%[0-9]+]] = load [[JADDR]]
   // CHECK: [[K:%[0-9]+]] = load [[KADDR]]
-  // CHECK: [[GETTER:%[0-9]+]] = class_method [[C]] : $SomeClass, #SomeClass.subscript!getter.1 : SomeClass -> (Builtin.Int64, Builtin.Int64) -> Builtin.Int64 , $@convention(method) (Builtin.Int64, Builtin.Int64, @guaranteed SomeClass) -> Builtin.Int64
+  // CHECK: [[GETTER:%[0-9]+]] = class_method [[C]] : $SomeClass, #SomeClass.subscript!getter.1 : (SomeClass) -> (Builtin.Int64, Builtin.Int64) -> Builtin.Int64 , $@convention(method) (Builtin.Int64, Builtin.Int64, @guaranteed SomeClass) -> Builtin.Int64
   // CHECK: apply [[GETTER]]([[J]], [[K]], [[C]])
   i = c[j, k]
 
@@ -342,7 +342,7 @@ func calls(i: Int, j: Int, k: Int) {
   // CHECK: [[I:%[0-9]+]] = load [[IADDR]]
   // CHECK: [[J:%[0-9]+]] = load [[JADDR]]
   // CHECK: [[K:%[0-9]+]] = load [[KADDR]]
-  // CHECK: [[SETTER:%[0-9]+]] = class_method [[C]] : $SomeClass, #SomeClass.subscript!setter.1 : SomeClass -> (Builtin.Int64, Builtin.Int64, Builtin.Int64) -> () , $@convention(method) (Builtin.Int64, Builtin.Int64, Builtin.Int64, @guaranteed SomeClass) -> () 
+  // CHECK: [[SETTER:%[0-9]+]] = class_method [[C]] : $SomeClass, #SomeClass.subscript!setter.1 : (SomeClass) -> (Builtin.Int64, Builtin.Int64, Builtin.Int64) -> () , $@convention(method) (Builtin.Int64, Builtin.Int64, Builtin.Int64, @guaranteed SomeClass) -> ()
   // CHECK: apply [[SETTER]]([[K]], [[I]], [[J]], [[C]])
   c[i, j] = k
 
@@ -466,7 +466,7 @@ func calls(i: Int, j: Int, k: Int) {
 
 // CHECK-LABEL: sil shared @_TFC9functions9SomeClass6method{{.*}} : $@convention(thin) (@owned SomeClass) -> @owned @callee_owned (Builtin.Int64) -> ()
 // CHECK: bb0(%0 : $SomeClass):
-// CHECK:   class_method %0 : $SomeClass, #SomeClass.method!1 : SomeClass -> (Builtin.Int64) -> ()
+// CHECK:   class_method %0 : $SomeClass, #SomeClass.method!1 : (SomeClass) -> (Builtin.Int64) -> ()
 // CHECK:   %2 = partial_apply %1(%0)
 // CHECK:   return %2
 
@@ -506,7 +506,7 @@ func return_generic_tuple()
 @noreturn func testNoReturnAttrPoly<T>(x: T) -> () {}
 
 // CHECK-LABEL: sil hidden @_TF9functions21testNoReturnAttrParam{{.*}} : $@convention(thin) (@owned @noreturn @callee_owned () -> ()) -> ()
-func testNoReturnAttrParam(fptr: @noreturn ()->()) -> () {}
+func testNoReturnAttrParam(fptr: @noreturn () -> ()) -> () {}
 
 // CHECK-LABEL: sil hidden [transparent] @_TF9functions15testTransparent{{.*}} : $@convention(thin) (Builtin.Int1) -> Builtin.Int1
 @_transparent func testTransparent(x: Bool) -> Bool {
@@ -581,12 +581,12 @@ func testNoescape() {
 // CHECK-LABEL: functions.testNoescape () -> ()
 // CHECK-NEXT: sil hidden @_TF9functions12testNoescapeFT_T_ : $@convention(thin) () -> ()
 // CHECK: function_ref functions.(testNoescape () -> ()).(closure #1)
-// CHECK-NEXT: function_ref @_TFF9functions12testNoescapeFT_T_U_FT_T_ : $@convention(thin) (@owned @box Int, @inout Int) -> ()
+// CHECK-NEXT: function_ref @_TFF9functions12testNoescapeFT_T_U_FT_T_ : $@convention(thin) (@owned @box Int) -> ()
 
 // Despite being a noescape closure, this needs to capture 'a' by-box so it can
 // be passed to the capturing closure.closure
 // CHECK: functions.(testNoescape () -> ()).(closure #1)
-// CHECK-NEXT: sil shared @_TFF9functions12testNoescapeFT_T_U_FT_T_ : $@convention(thin) (@owned @box Int, @inout Int) -> () {
+// CHECK-NEXT: sil shared @_TFF9functions12testNoescapeFT_T_U_FT_T_ : $@convention(thin) (@owned @box Int) -> () {
 
 
 
@@ -606,10 +606,10 @@ func testNoescape2() {
 // CHECK-LABEL: sil hidden @_TF9functions13testNoescape2FT_T_ : $@convention(thin) () -> () {
 
 // CHECK: // functions.(testNoescape2 () -> ()).(closure #1)
-// CHECK-NEXT: sil shared @_TFF9functions13testNoescape2FT_T_U_FT_T_ : $@convention(thin) (@owned @box Int, @inout Int) -> () {
+// CHECK-NEXT: sil shared @_TFF9functions13testNoescape2FT_T_U_FT_T_ : $@convention(thin) (@owned @box Int) -> () {
 
 // CHECK: // functions.(testNoescape2 () -> ()).(closure #1).(closure #1)
-// CHECK-NEXT: sil shared @_TFFF9functions13testNoescape2FT_T_U_FT_T_U_FT_T_ : $@convention(thin) (@owned @box Int, @inout Int) -> () {
+// CHECK-NEXT: sil shared @_TFFF9functions13testNoescape2FT_T_U_FT_T_U_FT_T_ : $@convention(thin) (@owned @box Int) -> () {
 
 enum PartialApplyEnumPayload<T, U> {
   case Left(T)

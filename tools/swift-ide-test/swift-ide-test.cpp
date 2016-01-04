@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -69,8 +69,8 @@ enum class ActionType {
   CodeCompletion,
   REPLCodeCompletion,
   DumpCompletionCache,
+  DumpImporterLookupTable,
   SyntaxColoring,
-  DumpAPI,
   DumpComments,
   Structure,
   Annotation,
@@ -144,10 +144,10 @@ Action(llvm::cl::desc("Mode:"), llvm::cl::init(ActionType::None),
                       "repl-code-completion", "Perform REPL-style code completion"),
            clEnumValN(ActionType::DumpCompletionCache,
                       "dump-completion-cache", "Dump a code completion cache file"),
+           clEnumValN(ActionType::DumpImporterLookupTable,
+                      "dump-importer-lookup-table", "Dump the Clang importer's lookup tables"),
            clEnumValN(ActionType::SyntaxColoring,
                       "syntax-coloring", "Perform syntax coloring"),
-           clEnumValN(ActionType::DumpAPI,
-                      "dump-api", "Dump the public API"),
            clEnumValN(ActionType::DumpComments,
                      "dump-comments", "Dump documentation comments attached to decls"),
            clEnumValN(ActionType::Structure,
@@ -269,14 +269,15 @@ ObjCForwardDeclarations("enable-objc-forward-declarations",
     llvm::cl::init(false));
 
 static llvm::cl::opt<bool>
-ImplicitProperties("enable-objc-implicit-properties",
-                   llvm::cl::desc("Implicitly import Objective-C getter/setter pairs as properties"),
-                   llvm::cl::init(false));
-
-static llvm::cl::opt<bool>
 InferDefaultArguments(
   "enable-infer-default-arguments",
   llvm::cl::desc("Infer default arguments for imported parameters"),
+  llvm::cl::init(false));
+
+static llvm::cl::opt<bool>
+UseSwiftLookupTables(
+  "enable-swift-name-lookup-tables",
+  llvm::cl::desc("Use Swift-specific name lookup tables in the importer"),
   llvm::cl::init(false));
 
 static llvm::cl::opt<bool>
@@ -539,7 +540,7 @@ static int doCodeCompletion(const CompilerInvocation &InitInvok,
       new ide::PrintingCodeCompletionConsumer(
           llvm::outs(), CodeCompletionKeywords));
 
-  // Cerate a factory for code completion callbacks that will feed the
+  // Create a factory for code completion callbacks that will feed the
   // Consumer.
   std::unique_ptr<CodeCompletionCallbacksFactory> CompletionCallbacksFactory(
       ide::makeCodeCompletionCallbacksFactory(CompletionContext,
@@ -802,68 +803,19 @@ static int doSyntaxColoring(const CompilerInvocation &InitInvok,
   return 0;
 }
 
-//============================================================================//
-// Dump API
-//============================================================================//
-
-namespace {
-
-class DumpAPIWalker : public ASTWalker {
-public:
-  SmallVector<SourceRange, 1> SourceRangesToDelete;
-  SmallVector<CharSourceRange, 1> CharSourceRangesToDelete;
-
-  DumpAPIWalker() {}
-
-  bool walkToDeclPre(Decl *D) override {
-    const bool exploreChildren = true;
-    const bool doneWithNode = false;
-
-    // Ignore implicit Decls and don't descend into them; they often
-    // have a bogus source range that collides with something we'll
-    // want to keep.
-    if (D->isImplicit())
-      return doneWithNode;
-
-    const auto *VD = dyn_cast<ValueDecl>(D);
-    if (!VD)
-      return exploreChildren; // Look for a nested ValueDecl.
-
-    if (VD->getFormalAccess() == Accessibility::Public) {
-      // Delete the bodies of public function and subscript decls
-      if (auto *AFD = dyn_cast<AbstractFunctionDecl>(D)) {
-        SourceRangesToDelete.push_back(AFD->getBodySourceRange());
-        return doneWithNode;
-      } else if (auto *SD = dyn_cast<SubscriptDecl>(D)) {
-        SourceRangesToDelete.push_back(SD->getBracesRange());
-        return doneWithNode;
-      }
-      return exploreChildren; // Handle nested decls.
-    }
-
-    // Delete entire non-public decls, including...
-    for (const auto &Single : VD->getRawComment().Comments)
-      CharSourceRangesToDelete.push_back(Single.Range); // attached comments
-
-    VD->getAttrs().getAttrRanges(SourceRangesToDelete); // and attributes
-
-    if (const auto *Var = dyn_cast<VarDecl>(VD)) {
-      // VarDecls extend through their entire parent PatternBinding.
-      SourceRangesToDelete.push_back(
-          Var->getParentPatternBinding()->getSourceRange());
-    } else {
-      SourceRangesToDelete.push_back(VD->getSourceRange());
-    }
-    return doneWithNode;
+static int doDumpImporterLookupTables(const CompilerInvocation &InitInvok,
+                                      StringRef SourceFilename) {
+  if (options::ImportObjCHeader.empty()) {
+    llvm::errs() << "implicit header required\n";
+    llvm::cl::PrintHelpMessage();
+    return 1;
   }
-};
-}
 
-static int doDumpAPI(const CompilerInvocation &InitInvok,
-                     StringRef SourceFilename) {
   CompilerInvocation Invocation(InitInvok);
   Invocation.addInputFilename(SourceFilename);
-  Invocation.getLangOptions().DisableAvailabilityChecking = false;
+
+  // We must use the Swift lookup tables.
+  Invocation.getClangImporterOptions().UseSwiftLookupTables = true;
 
   CompilerInstance CI;
 
@@ -874,70 +826,10 @@ static int doDumpAPI(const CompilerInvocation &InitInvok,
     return 1;
   CI.performSema();
 
-  unsigned BufID = CI.getInputBufferIDs().back();
-  SourceFile *SF = nullptr;
-  for (auto Unit : CI.getMainModule()->getFiles()) {
-    SF = dyn_cast<SourceFile>(Unit);
-    if (SF)
-      break;
-  }
-  assert(SF && "no source file?");
-  const auto &SM = CI.getSourceMgr();
-  DumpAPIWalker Walker;
-  CI.getMainModule()->walk(Walker);
-
-  //===--- rewriting ------------------------------------------------------===//
-  StringRef Input = SM.getLLVMSourceMgr().getMemoryBuffer(BufID)->getBuffer();
-  clang::RewriteBuffer RewriteBuf;
-  RewriteBuf.Initialize(Input);
-
-  // Convert all the accumulated SourceRanges into CharSourceRanges
-  auto &CharSourceRanges = Walker.CharSourceRangesToDelete;
-  for (const auto &SR : Walker.SourceRangesToDelete) {
-    auto End = Lexer::getLocForEndOfToken(SM, SR.End);
-    CharSourceRanges.push_back(CharSourceRange(SM, SR.Start, End));
-  }
-
-  // Drop any invalid ranges
-  CharSourceRanges.erase(
-      std::remove_if(CharSourceRanges.begin(), CharSourceRanges.end(),
-                     [](const CharSourceRange CSR) { return !CSR.isValid(); }),
-      CharSourceRanges.end());
-
-  // Sort them so we can easily handle overlaps; the SourceManager
-  // doesn't cope well with overlapping deletions.
-  std::sort(CharSourceRanges.begin(), CharSourceRanges.end(),
-            [&](CharSourceRange LHS, CharSourceRange RHS) {
-              return SM.isBeforeInBuffer(LHS.getStart(), RHS.getStart());
-            });
-
-  // A little function that we can re-use to delete a CharSourceRange
-  const auto Del = [&](CharSourceRange CR) {
-    const auto Start = SM.getLocOffsetInBuffer(CR.getStart(), BufID);
-    const auto End = SM.getLocOffsetInBuffer(CR.getEnd(), BufID);
-    RewriteBuf.RemoveText(Start, End - Start, true);
-  };
-
-  // Accumulate all overlapping ranges, deleting the previous one when
-  // no overlap is detected.
-  CharSourceRange Accumulator;
-  for (const auto CR : CharSourceRanges) {
-    if (!Accumulator.isValid()) {
-      Accumulator = CR;
-    } else if (Accumulator.overlaps(CR)) {
-      Accumulator.widen(CR);
-    } else {
-      Del(Accumulator);
-      Accumulator = CR;
-    }
-  }
-
-  // The last valid range still needs to be deleted.
-  if (Accumulator.isValid())
-    Del(Accumulator);
-
-  // Write the edited buffer to stdout
-  RewriteBuf.write(llvm::outs());
+  auto &Context = CI.getASTContext();
+  auto &Importer = static_cast<ClangImporter &>(
+                     *Context.getClangModuleLoader());
+  Importer.dumpSwiftLookupTables();
 
   return 0;
 }
@@ -1568,11 +1460,14 @@ static int doPrintLocalTypes(const CompilerInvocation &InitInvok,
 
     // Simulate already having mangled names
     for (auto LTD : LocalTypeDecls) {
-      SmallString<64> MangledName;
-      llvm::raw_svector_ostream Buffer(MangledName);
-      Mangle::Mangler Mangler(Buffer, /*DWARFMangling*/ true);
-      Mangler.mangleTypeForDebugger(LTD->getDeclaredType(), LTD->getDeclContext());
-      MangledNames.push_back(Buffer.str());
+      std::string MangledName;
+      {
+        Mangle::Mangler Mangler(/*DWARFMangling*/ true);
+        Mangler.mangleTypeForDebugger(LTD->getDeclaredType(),
+                                      LTD->getDeclContext());
+        MangledName = Mangler.finalize();
+      }
+      MangledNames.push_back(MangledName);
     }
 
     // Simulate the demangling / parsing process
@@ -2434,11 +2329,6 @@ int main(int argc, char *argv[]) {
         options::InputFilenames);
   }
 
-  if (options::Action == ActionType::GenerateModuleAPIDescription) {
-    llvm::errs() << "unimplemented\n";
-    return 1;
-  }
-
   if (options::Action == ActionType::DumpCompletionCache) {
     if (options::InputFilenames.empty()) {
       llvm::errs() << "-dump-completin-cache requires an input file\n";
@@ -2507,14 +2397,14 @@ int main(int argc, char *argv[]) {
     !options::DisableAccessControl;
   InitInvok.getLangOptions().CodeCompleteInitsInPostfixExpr |=
       options::CodeCompleteInitsInPostfixExpr;
-  InitInvok.getClangImporterOptions().InferImplicitProperties |=
-    options::ImplicitProperties;
   InitInvok.getClangImporterOptions().ImportForwardDeclarations |=
     options::ObjCForwardDeclarations;
   InitInvok.getClangImporterOptions().OmitNeedlessWords |=
     options::OmitNeedlessWords;
   InitInvok.getClangImporterOptions().InferDefaultArguments |=
     options::InferDefaultArguments;
+  InitInvok.getClangImporterOptions().UseSwiftLookupTables |=
+    options::UseSwiftLookupTables;
 
   if (!options::ResourceDir.empty()) {
     InitInvok.setRuntimeResourcePath(options::ResourceDir);
@@ -2614,8 +2504,8 @@ int main(int argc, char *argv[]) {
                                 options::Typecheck);
     break;
 
-  case ActionType::DumpAPI:
-    ExitCode = doDumpAPI(InitInvok, options::SourceFilename);
+  case ActionType::DumpImporterLookupTable:
+    ExitCode = doDumpImporterLookupTables(InitInvok, options::SourceFilename);
     break;
 
   case ActionType::Structure:

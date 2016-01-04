@@ -1,4 +1,4 @@
-// RUN: %target-swift-frontend  -parse-as-library -emit-silgen -disable-objc-attr-requires-foundation-module %s | FileCheck %s
+// RUN: %target-swift-frontend -use-native-super-method -parse-as-library -emit-silgen -disable-objc-attr-requires-foundation-module %s | FileCheck %s
 
 var zero: Int = 0
 
@@ -113,7 +113,7 @@ func physical_struct_lvalue(c: Int) {
     r.y = a
    // strong_retain %0 : $RefSubclass
    // CHECK: [[R_SUP:%[0-9]+]] = upcast %0 : $RefSubclass to $Ref
-   // CHECK: [[FN:%[0-9]+]] = class_method [[R_SUP]] : $Ref, #Ref.y!setter.1 : Ref -> (Int) -> () , $@convention(method) (Int, @guaranteed Ref) -> ()
+   // CHECK: [[FN:%[0-9]+]] = class_method [[R_SUP]] : $Ref, #Ref.y!setter.1 : (Ref) -> (Int) -> () , $@convention(method) (Int, @guaranteed Ref) -> ()
    // CHECK: apply [[FN]](%1, [[R_SUP]]) :
    // CHECK: strong_release [[R_SUP]]
     r.w = a
@@ -192,7 +192,7 @@ func logical_struct_in_reftype_set(inout value: Val, z1: Int) {
   // CHECK: [[STORAGE:%.*]] = alloc_stack $Builtin.UnsafeValueBuffer
   // CHECK: [[VAL_REF_VAL_PROP_TEMP:%.*]] = alloc_stack $Val
   // CHECK: [[T0:%.*]] = address_to_pointer [[VAL_REF_VAL_PROP_TEMP]]#1 : $*Val to $Builtin.RawPointer
-  // CHECK: [[MAT_VAL_PROP_METHOD:%[0-9]+]] = class_method {{.*}} : $Ref, #Ref.val_prop!materializeForSet.1 : Ref -> (Builtin.RawPointer, inout Builtin.UnsafeValueBuffer) -> (Builtin.RawPointer, (@convention(thin) (Builtin.RawPointer, inout Builtin.UnsafeValueBuffer, inout Ref, @thick Ref.Type) -> ())?)
+  // CHECK: [[MAT_VAL_PROP_METHOD:%[0-9]+]] = class_method {{.*}} : $Ref, #Ref.val_prop!materializeForSet.1 : (Ref) -> (Builtin.RawPointer, inout Builtin.UnsafeValueBuffer) -> (Builtin.RawPointer, (@convention(thin) (Builtin.RawPointer, inout Builtin.UnsafeValueBuffer, inout Ref, @thick Ref.Type) -> ())?)
   // CHECK: [[MAT_RESULT:%[0-9]+]] = apply [[MAT_VAL_PROP_METHOD]]([[T0]], [[STORAGE]]#1, [[VAL_REF]])
   // CHECK: [[T0:%.*]] = tuple_extract [[MAT_RESULT]] : $(Builtin.RawPointer, Optional<@convention(thin) (Builtin.RawPointer, inout Builtin.UnsafeValueBuffer, inout Ref, @thick Ref.Type) -> ()>), 0
   // CHECK: [[T1:%[0-9]+]] = pointer_to_address [[T0]] : $Builtin.RawPointer to $*Val
@@ -526,7 +526,7 @@ struct DidSetWillSetTests: ForceAccessors {
 
   // CHECK-NEXT: [[AADDR:%.*]] = struct_element_addr [[SELFBOX:%.*]]#1 : $*DidSetWillSetTests, #DidSetWillSetTests.a
   // CHECK-NEXT: [[OLDVAL:%.*]] = load [[AADDR]] : $*Int
-  // CHECK-NEXT: debug_value [[OLDVAL]] : $Int  // let tmp
+  // CHECK-NEXT: debug_value [[OLDVAL]] : $Int, let, name "tmp"
 
   // CHECK-NEXT: // function_ref {{.*}}.DidSetWillSetTests.a.willset : Swift.Int
   // CHECK-NEXT: [[WILLSETFN:%.*]] = function_ref @_TFV10properties18DidSetWillSetTestsw1a
@@ -638,7 +638,7 @@ class rdar16151899Derived : rdar16151899Base {
     override init() {
         super.init()
         // CHECK: upcast {{.*}} : $rdar16151899Derived to $rdar16151899Base
-        // CHECK-NEXT: function_ref properties.rdar16151899Base.init
+        // CHECK-NEXT: super_method {{%[0-9]+}} : $rdar16151899Derived, #rdar16151899Base.init!initializer.1
 
         // This should not be a direct access, it should call the setter in the
         // base.
@@ -646,7 +646,7 @@ class rdar16151899Derived : rdar16151899Base {
         
         // CHECK:  [[BASEPTR:%[0-9]+]] = upcast {{.*}} : $rdar16151899Derived to $rdar16151899Base
         // CHECK: load{{.*}}Int
-        // CHECK-NEXT: [[SETTER:%[0-9]+]] = class_method {{.*}} : $rdar16151899Base, #rdar16151899Base.x!setter.1 : rdar16151899Base
+        // CHECK-NEXT: [[SETTER:%[0-9]+]] = class_method {{.*}} : $rdar16151899Base, #rdar16151899Base.x!setter.1 : (rdar16151899Base)
         // CHECK-NEXT: apply [[SETTER]]({{.*}}, [[BASEPTR]]) 
     }
 }
@@ -667,18 +667,21 @@ func propertyWithDidSetTakingOldValue() {
 
 // CHECK: // properties.(propertyWithDidSetTakingOldValue () -> ()).(p #1).setter : Swift.Int
 // CHECK-NEXT: sil {{.*}} @_TFF10properties32propertyWithDidSetTakingOldValue
-// CHECK: bb0(%0 : $Int, %1 : $@box Int, %2 : $*Int):
-// CHECK-NEXT:  debug_value %0 : $Int
-// CHECK-NEXT:  %4 = load %2 : $*Int
-// CHECK-NEXT:  debug_value %4 : $Int
-// CHECK-NEXT:  assign %0 to %2 : $*Int
+// CHECK: bb0(%0 : $Int, %1 : $@box Int):
+// CHECK-NEXT:  debug_value %0 : $Int, let, name "newValue", argno 1
+// CHECK-NEXT:  %3 = project_box %1
+// CHECK-NEXT:  debug_value_addr %3 : $*Int, var, name "p", argno 2
+// CHECK-NEXT:  %5 = load %3 : $*Int
+// CHECK-NEXT:  debug_value %5 : $Int
+// CHECK-NEXT:  assign %0 to %3 : $*Int
 // CHECK-NEXT:  strong_retain %1 : $@box Int
+// CHECK-NEXT:  mark_function_escape %3
 // CHECK-NEXT:  // function_ref
-// CHECK-NEXT:  %8 = function_ref @_TFF10properties32propertyWithDidSetTakingOldValueFT_T_WL_1pSi : $@convention(thin) (Int, @owned @box Int, @inout Int) -> ()
-// CHECK-NEXT:  %9 = apply %8(%4, %1, %2) : $@convention(thin) (Int, @owned @box Int, @inout Int) -> ()
+// CHECK-NEXT:  %10 = function_ref @_TFF10properties32propertyWithDidSetTakingOldValueFT_T_WL_1pSi : $@convention(thin) (Int, @owned @box Int) -> ()
+// CHECK-NEXT:  %11 = apply %10(%5, %1) : $@convention(thin) (Int, @owned @box Int) -> ()
 // CHECK-NEXT:  strong_release %1 : $@box Int
-// CHECK-NEXT:  %11 = tuple ()
-// CHECK-NEXT:  return %11 : $()
+// CHECK-NEXT:  %13 = tuple ()
+// CHECK-NEXT:  return %13 : $()
 // CHECK-NEXT:}
 
 
@@ -699,8 +702,7 @@ class DerivedProperty : BaseProperty {
 // CHECK: sil hidden @_TFC10properties15DerivedProperty24super_property_reference
 // CHECK: bb0(%0 : $DerivedProperty):
 // CHECK:  [[BASEPTR:%[0-9]+]] = upcast %0 : $DerivedProperty to $BaseProperty
-// CHECK:  // function_ref properties.BaseProperty.x.getter
-// CHECK:  [[FN:%[0-9]+]] = function_ref @_TFC10properties12BasePropertyg1x
+// CHECK:  [[FN:%[0-9]+]] = super_method %0 : $DerivedProperty, #BaseProperty.x!getter.1
 // CHECK:  apply [[FN]]([[BASEPTR]]) : $@convention(method) (@guaranteed BaseProperty) -> Int // user: %7
 
 
@@ -996,7 +998,7 @@ struct MutatingGetterStruct {
   }
 
   // CHECK-LABEL: sil hidden @_TZFV10properties20MutatingGetterStruct4test
-  // CHECK: [[X:%.*]] = alloc_box $MutatingGetterStruct  // var x
+  // CHECK: [[X:%.*]] = alloc_box $MutatingGetterStruct, var, name "x"
   // CHECK: store {{.*}} to [[X]]#1 : $*MutatingGetterStruct
   // CHECK: apply {{%.*}}([[X]]#1) : $@convention(method) (@inout MutatingGetterStruct) -> Int
   static func test() {

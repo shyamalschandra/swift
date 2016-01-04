@@ -1,8 +1,8 @@
-//===--- GenTypes.cpp - Swift IR Generation For Types ---------------------===//
+//===--- GenType.cpp - Swift IR Generation For Types ----------------------===//
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -40,7 +40,6 @@
 #include "ProtocolInfo.h"
 #include "ReferenceTypeInfo.h"
 #include "ScalarTypeInfo.h"
-#include "UnownedTypeInfo.h"
 #include "WeakTypeInfo.h"
 
 using namespace swift;
@@ -563,7 +562,7 @@ FixedTypeInfo::getSpareBitExtraInhabitantIndex(IRGenFunction &IGF,
   // If we had a valid value, return -1. Otherwise, return the index.
   auto phi = IGF.Builder.CreatePHI(IGF.IGM.Int32Ty, 2);
   phi->addIncoming(llvm::ConstantInt::get(IGF.IGM.Int32Ty, -1), origBB);
-  phi->addIncoming(idx, spareBB);;
+  phi->addIncoming(idx, spareBB);
   
   return phi;
 }
@@ -662,7 +661,7 @@ namespace {
   };
   
   /// A TypeInfo implementation for opaque storage. Swift will preserve any
-  /// data stored into this arbitarily sized and aligned field, but doesn't
+  /// data stored into this arbitrarily sized and aligned field, but doesn't
   /// know anything about the data.
   class OpaqueStorageTypeInfo final :
     public ScalarTypeInfo<OpaqueStorageTypeInfo, LoadableTypeInfo>
@@ -2031,8 +2030,9 @@ SILType irgen::getSingletonAggregateFieldType(IRGenModule &IGM,
 
     // If there's only one stored property, we have the layout of its field.
     auto allFields = structDecl->getStoredProperties();
+    
     auto field = allFields.begin();
-    if (std::next(field) == allFields.end())
+    if (!allFields.empty() && std::next(field) == allFields.end())
       return t.getFieldType(*field, *IGM.SILMod);
 
     return SILType();
@@ -2040,8 +2040,9 @@ SILType irgen::getSingletonAggregateFieldType(IRGenModule &IGM,
 
   if (auto enumDecl = t.getEnumOrBoundGenericEnum()) {
     auto allCases = enumDecl->getAllElements();
+    
     auto theCase = allCases.begin();
-    if (std::next(theCase) == allCases.end()
+    if (!allCases.empty() && std::next(theCase) == allCases.end()
         && (*theCase)->hasArgumentType())
       return t.getEnumElementType(*theCase, *IGM.SILMod);
 

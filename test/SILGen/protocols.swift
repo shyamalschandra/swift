@@ -82,7 +82,7 @@ func use_subscript_archetype_lvalue_get<T : SubscriptableGetSet>(inout generic :
 }
 // CHECK-LABEL: sil hidden @{{.*}}use_subscript_archetype_lvalue_get
 // CHECK: bb0(%0 : $*T, %1 : $Int):
-// CHECK: [[INOUTBOX:%[0-9]+]] = alloc_box $T  // var generic
+// CHECK: [[INOUTBOX:%[0-9]+]] = alloc_box $T, var, name "generic"
 // CHECK: [[GUARANTEEDSTACK:%[0-9]+]] = alloc_stack $T
 // CHECK: copy_addr [[INOUTBOX]]#1 to [initialization]
 // CHECK: [[METH:%[0-9]+]] = witness_method $T, #SubscriptableGetSet.subscript!getter.1
@@ -253,7 +253,7 @@ class ClassWithGetter : PropertyWithGetter {
 // CHECK-NEXT: [[CCOPY:%.*]] = alloc_stack $ClassWithGetter
 // CHECK-NEXT: copy_addr [[C]] to [initialization] [[CCOPY]]#1
 // CHECK-NEXT: [[CCOPY_LOADED:%.*]] = load [[CCOPY]]#1
-// CHECK-NEXT: [[FUN:%.*]] = class_method [[CCOPY_LOADED]] : $ClassWithGetter, #ClassWithGetter.a!getter.1 : ClassWithGetter -> () -> Int , $@convention(method) (@guaranteed ClassWithGetter) -> Int
+// CHECK-NEXT: [[FUN:%.*]] = class_method [[CCOPY_LOADED]] : $ClassWithGetter, #ClassWithGetter.a!getter.1 : (ClassWithGetter) -> () -> Int , $@convention(method) (@guaranteed ClassWithGetter) -> Int
 // CHECK-NEXT: apply [[FUN]]([[CCOPY_LOADED]])
 // CHECK-NEXT: strong_release [[CCOPY_LOADED]]
 // CHECK-NEXT: dealloc_stack [[CCOPY]]#0
@@ -279,7 +279,7 @@ class ClassWithGetterSetter : PropertyWithGetterSetter, PropertyWithGetter {
 // CHECK-NEXT: [[CCOPY:%.*]] = alloc_stack $ClassWithGetterSetter
 // CHECK-NEXT: copy_addr [[C]] to [initialization] [[CCOPY]]#1
 // CHECK-NEXT: [[CCOPY_LOADED:%.*]] = load [[CCOPY]]#1
-// CHECK-NEXT: [[FUN:%.*]] = class_method [[CCOPY_LOADED]] : $ClassWithGetterSetter, #ClassWithGetterSetter.b!getter.1 : ClassWithGetterSetter -> () -> Int , $@convention(method) (@guaranteed ClassWithGetterSetter) -> Int
+// CHECK-NEXT: [[FUN:%.*]] = class_method [[CCOPY_LOADED]] : $ClassWithGetterSetter, #ClassWithGetterSetter.b!getter.1 : (ClassWithGetterSetter) -> () -> Int , $@convention(method) (@guaranteed ClassWithGetterSetter) -> Int
 // CHECK-NEXT: apply [[FUN]]([[CCOPY_LOADED]])
 // CHECK-NEXT: strong_release [[CCOPY_LOADED]]
 // CHECK-NEXT: dealloc_stack [[CCOPY]]#0
@@ -298,7 +298,7 @@ class ClassWithStoredProperty : PropertyWithGetter {
   // CHECK: bb0([[ARG:%.*]] : $ClassWithStoredProperty):
   // CHECK-NEXT: debug_value [[ARG]]
   // CHECK-NOT: strong_retain
-  // CHECK-NEXT: [[FUN:%.*]] = class_method [[ARG]] : $ClassWithStoredProperty, #ClassWithStoredProperty.a!getter.1 : ClassWithStoredProperty -> () -> Int , $@convention(method) (@guaranteed ClassWithStoredProperty) -> Int
+  // CHECK-NEXT: [[FUN:%.*]] = class_method [[ARG]] : $ClassWithStoredProperty, #ClassWithStoredProperty.a!getter.1 : (ClassWithStoredProperty) -> () -> Int , $@convention(method) (@guaranteed ClassWithStoredProperty) -> Int
   // CHECK-NEXT: [[RESULT:%.*]] = apply [[FUN]]([[ARG]])
   // CHECK-NOT: strong_release
   // CHECK-NEXT: return [[RESULT]] : $Int
@@ -323,7 +323,7 @@ struct StructWithStoredProperty : PropertyWithGetter {
 //
 // *NOTE* Even though at first glance the copy_addr looks like a leak
 // here, StructWithStoredProperty is a trivial struct implying that no
-// leak is occuring. See the test with StructWithStoredClassProperty
+// leak is occurring. See the test with StructWithStoredClassProperty
 // that makes sure in such a case we don't leak. This is due to the
 // thunking code being too dumb but it is harmless to program
 // correctness.

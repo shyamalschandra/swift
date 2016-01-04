@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -274,6 +274,45 @@ getActualDefaultArgKind(uint8_t raw) {
   return None;
 }
 
+ParameterList *ModuleFile::readParameterList() {
+  using namespace decls_block;
+
+  SmallVector<uint64_t, 8> scratch;
+  auto entry = DeclTypeCursor.advance(AF_DontPopBlockAtEnd);
+  unsigned recordID = DeclTypeCursor.readRecord(entry.ID, scratch);
+  assert(recordID == PARAMETERLIST);
+  (void) recordID;
+  unsigned numParams;
+  decls_block::ParameterListLayout::readRecord(scratch, numParams);
+
+  SmallVector<ParamDecl*, 8> params;
+  for (unsigned i = 0; i != numParams; ++i) {
+    scratch.clear();
+    auto entry = DeclTypeCursor.advance(AF_DontPopBlockAtEnd);
+    unsigned recordID = DeclTypeCursor.readRecord(entry.ID, scratch);
+    assert(recordID == PARAMETERLIST_ELT);
+    (void) recordID;
+    
+    DeclID paramID;
+    bool isVariadic;
+    uint8_t rawDefaultArg;
+    decls_block::ParameterListEltLayout::readRecord(scratch, paramID,
+                                                    isVariadic, rawDefaultArg);
+    
+
+    auto decl = cast<ParamDecl>(getDecl(paramID));
+    decl->setVariadic(isVariadic);
+
+    // Decode the default argument kind.
+    // FIXME: Default argument expression, if available.
+    if (auto defaultArg = getActualDefaultArgKind(rawDefaultArg))
+      decl->setDefaultArgumentKind(*defaultArg);
+    params.push_back(decl);
+  }
+  
+  return ParameterList::create(getContext(), params);
+}
+
 Pattern *ModuleFile::maybeReadPattern() {
   using namespace decls_block;
 
@@ -319,25 +358,12 @@ Pattern *ModuleFile::maybeReadPattern() {
 
       // FIXME: Add something for this record or remove it.
       IdentifierID labelID;
-      uint8_t rawDefaultArg;
-      bool hasEllipsis;
-      TuplePatternEltLayout::readRecord(scratch, labelID, hasEllipsis,
-                                        rawDefaultArg);
+      TuplePatternEltLayout::readRecord(scratch, labelID);
       Identifier label = getIdentifier(labelID);
 
       Pattern *subPattern = maybeReadPattern();
       assert(subPattern);
-
-      // Decode the default argument kind.
-      // FIXME: Default argument expression, if available.
-      swift::DefaultArgumentKind defaultArgKind
-        = swift::DefaultArgumentKind::None;
-      if (auto defaultArg = getActualDefaultArgKind(rawDefaultArg))
-        defaultArgKind = *defaultArg;
-
-      elements.push_back(TuplePatternElt(label, SourceLoc(), subPattern,
-                                         hasEllipsis, SourceLoc(),
-                                         nullptr, defaultArgKind));
+      elements.push_back(TuplePatternElt(label, SourceLoc(), subPattern));
     }
 
     auto result = TuplePattern::create(getContext(), SourceLoc(),
@@ -578,6 +604,11 @@ ModuleFile::maybeReadSubstitution(llvm::BitstreamCursor &cursor) {
                                                           archetypeID,
                                                           replacementID,
                                                           numConformances);
+
+  if (&cursor == &SILCursor) {
+    assert(Types[archetypeID-1].isComplete() &&
+	   "SIL substitutions should always reference existing archetypes");
+  }
 
   auto archetypeTy = getType(archetypeID)->castTo<ArchetypeType>();
   auto replacementTy = getType(replacementID);
@@ -1436,6 +1467,8 @@ DeclContext *ModuleFile::getDeclContext(DeclContextID DCID) {
     declContextOrOffset = ED;
   } else if (auto AFD = dyn_cast<AbstractFunctionDecl>(D)) {
     declContextOrOffset = AFD;
+  } else if (auto SD = dyn_cast<SubscriptDecl>(D)) {
+    declContextOrOffset = SD;
   } else {
     llvm_unreachable("Unknown Decl : DeclContext kind");
   }
@@ -1486,7 +1519,7 @@ Module *ModuleFile::getModule(ArrayRef<Identifier> name) {
 }
 
 
-/// Translate from the Serialization assocativity enum values to the AST
+/// Translate from the Serialization associativity enum values to the AST
 /// strongly-typed enum.
 ///
 /// The former is guaranteed to be stable, but may not reflect this version of
@@ -1947,6 +1980,21 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
         break;
       }
 
+      case decls_block::MigrationId_DECL_ATTR: {
+        uint64_t endOfIdentIndex;
+        serialization::decls_block::MigrationIdDeclAttrLayout::readRecord(
+          scratch, endOfIdentIndex);
+
+        StringRef ident = blobData.substr(0, endOfIdentIndex);
+        StringRef pattern = blobData.substr(endOfIdentIndex);
+        Attr = new (ctx) MigrationIdAttr(SourceLoc(), SourceLoc(),
+                                         SourceLoc(),
+                                         ctx.AllocateCopy(ident),
+                                         ctx.AllocateCopy(pattern),
+                                         SourceLoc(), /*isImplicit=*/false);
+        break;
+      }
+
 #define SIMPLE_DECL_ATTR(NAME, CLASS, ...) \
       case decls_block::CLASS##_DECL_ATTR: { \
         bool isImplicit; \
@@ -2229,17 +2277,20 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
       return nullptr;
     }
 
-    Pattern *bodyParams0 = maybeReadPattern();
-    Pattern *bodyParams1 = maybeReadPattern();
-    assert(bodyParams0&&bodyParams1 && "missing body patterns for constructor");
-    ctor->setBodyParams(bodyParams0, bodyParams1);
+    auto *bodyParams0 = readParameterList();
+    auto *bodyParams1 = readParameterList();
+    assert(bodyParams0 && bodyParams1 && "missing parameters for constructor");
+    ctor->setParameterLists(bodyParams0->get(0), bodyParams1);
 
     // This must be set after recording the constructor in the map.
     // A polymorphic constructor type needs to refer to the constructor to get
     // its generic parameters.
     ctor->setType(getType(signatureID));
-    if (auto interfaceType = getType(interfaceID))
+    if (auto interfaceType = getType(interfaceID)) {
+      if (auto genericFnType = interfaceType->getAs<GenericFunctionType>())
+        ctor->setGenericSignature(genericFnType->getGenericSignature());
       ctor->setInterfaceType(interfaceType);
+    }
 
     // Set the initializer type of the constructor.
     auto allocType = ctor->getType();
@@ -2480,19 +2531,17 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
     fn->setType(signature);
 
     // Set the interface type.
-    if (auto interfaceType = getType(interfaceTypeID))
+    if (auto interfaceType = getType(interfaceTypeID)) {
+      if (auto genericFnType = interfaceType->getAs<GenericFunctionType>())
+        fn->setGenericSignature(genericFnType->getGenericSignature());
       fn->setInterfaceType(interfaceType);
+    }
 
-    SmallVector<Pattern *, 16> patternBuf;
-    while (Pattern *pattern = maybeReadPattern())
-      patternBuf.push_back(pattern);
+    SmallVector<ParameterList*, 2> paramLists;
+    for (unsigned i = 0, e = numParamPatterns; i != e; ++i)
+      paramLists.push_back(readParameterList());
 
-    assert(!patternBuf.empty());
-    assert((patternBuf.size() == numParamPatterns) &&
-           "incorrect number of parameters");
-
-    ArrayRef<Pattern *> patterns(patternBuf);
-    fn->setDeserializedSignature(patterns,
+    fn->setDeserializedSignature(paramLists,
                                  TypeLoc::withoutLoc(signature->getResult()));
 
     if (auto errorConvention = maybeReadForeignErrorConvention())
@@ -2908,23 +2957,19 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
     if (declOrOffset.isComplete())
       return declOrOffset;
 
-    Pattern *indices = maybeReadPattern();
-    assert(indices);
-
-    auto elemTy = TypeLoc::withoutLoc(getType(elemTypeID));
-    if (declOrOffset.isComplete())
-      return declOrOffset;
-
     // Resolve the name ids.
     SmallVector<Identifier, 2> argNames;
     for (auto argNameID : argNameIDs)
       argNames.push_back(getIdentifier(argNameID));
 
     DeclName name(ctx, ctx.Id_subscript, argNames);
-    auto subscript = createDecl<SubscriptDecl>(name, SourceLoc(), indices,
-                                               SourceLoc(), elemTy, DC);
+    auto subscript = createDecl<SubscriptDecl>(name, SourceLoc(), nullptr,
+                                               SourceLoc(), TypeLoc(), DC);
     declOrOffset = subscript;
 
+    subscript->setIndices(readParameterList());    
+    subscript->getElementTypeLoc() = TypeLoc::withoutLoc(getType(elemTypeID));
+    
     configureStorage(subscript, rawStorageKind,
                      getterID, setterID, materializeForSetID,
                      addressorID, mutableAddressorID, willSetID, didSetID);
@@ -2989,7 +3034,7 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
     auto inheritedTypes = ctx.Allocate<TypeLoc>(rawInheritedIDs.size());
     for_each(inheritedTypes, rawInheritedIDs,
              [this](TypeLoc &tl, uint64_t rawID) {
-      tl = TypeLoc::withoutLoc(getType(rawID));;
+      tl = TypeLoc::withoutLoc(getType(rawID));
     });
     extension->setInherited(inheritedTypes);
     extension->setCheckedInheritanceClause();
@@ -3049,9 +3094,9 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
     declOrOffset = dtor;
 
     dtor->setAccessibility(cast<ClassDecl>(DC)->getFormalAccess());
-    Pattern *selfParams = maybeReadPattern();
+    auto *selfParams = readParameterList();
     assert(selfParams && "Didn't get self pattern?");
-    dtor->setSelfPattern(selfParams);
+    dtor->setSelfDecl(selfParams->get(0));
 
     dtor->setType(getType(signatureID));
     dtor->setInterfaceType(getType(interfaceID));
@@ -3152,6 +3197,7 @@ Optional<swift::ParameterConvention> getActualParameterConvention(uint8_t raw) {
   CASE(Indirect_In)
   CASE(Indirect_Out)
   CASE(Indirect_Inout)
+  CASE(Indirect_InoutAliasable)
   CASE(Indirect_In_Guaranteed)
   CASE(Direct_Owned)
   CASE(Direct_Unowned)
@@ -3643,7 +3689,7 @@ Type ModuleFile::getType(TypeID TID) {
     bool noreturn = false;
     bool throws = false;
 
-    //todo add noreturn serialization.
+    // TODO: add noreturn serialization.
     decls_block::PolymorphicFunctionTypeLayout::readRecord(scratch,
                                                            inputID,
                                                            resultID,
@@ -3679,7 +3725,7 @@ Type ModuleFile::getType(TypeID TID) {
     bool throws = false;
     ArrayRef<uint64_t> genericParamIDs;
 
-    //todo add noreturn serialization.
+    // TODO: add noreturn serialization.
     decls_block::GenericFunctionTypeLayout::readRecord(scratch,
                                                        inputID,
                                                        resultID,
@@ -3892,9 +3938,7 @@ Type ModuleFile::getType(TypeID TID) {
   return typeOrOffset;
 }
 
-void ModuleFile::loadAllMembers(Decl *D,
-                                uint64_t contextData,
-                                bool *) {
+void ModuleFile::loadAllMembers(Decl *D, uint64_t contextData) {
   PrettyStackTraceDecl trace("loading members for", D);
 
   BCOffsetRAII restoreOffset(DeclTypeCursor);
@@ -3955,6 +3999,7 @@ void ModuleFile::finishNormalConformance(NormalProtocolConformance *conformance,
   SmallVector<uint64_t, 16> scratch;
 
   unsigned kind = DeclTypeCursor.readRecord(entry.ID, scratch);
+  (void) kind;
   assert(kind == NORMAL_PROTOCOL_CONFORMANCE &&
          "registered lazy loader incorrectly");
   NormalProtocolConformanceLayout::readRecord(scratch, protoID,

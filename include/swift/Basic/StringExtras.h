@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -28,6 +28,11 @@
 #include <string>
 
 namespace swift {
+  /// Determine whether the given string can be an argument label.
+  ///
+  /// \seealso Token::canBeArgumentLabel()
+  bool canBeArgumentLabel(StringRef identifier);
+
   /// Describes the kind of preposition a word is.
   enum PrepositionKind {
     PK_None = 0,
@@ -50,6 +55,14 @@ namespace swift {
 
   /// Determine the part of speech for the given word.
   PartOfSpeech getPartOfSpeech(StringRef word);
+
+  /// Scratch space used for returning a set of StringRefs.
+  class StringScratchSpace {
+    llvm::BumpPtrAllocator Allocator;
+
+  public:
+    StringRef copyString(StringRef string);
+  };
 
   namespace camel_case {
     class WordIterator;
@@ -219,6 +232,16 @@ namespace swift {
     /// unchanged.
     StringRef toLowercaseWord(StringRef string, SmallVectorImpl<char> &scratch);
 
+    /// Lowercase the first word within the given camelCase string.
+    ///
+    /// \param string The string to lowercase.
+    /// \param scratch Scratch buffer used to form the resulting string.
+    ///
+    /// \returns the string with the first word lowercased. When the
+    /// first word is an acronym, the string will be returned
+    /// unchanged.
+    StringRef toLowercaseWord(StringRef string, StringScratchSpace &scratch);
+
     /// Sentence-case the given camelCase string by turning the first
     /// letter into an uppercase letter.
     ///
@@ -357,14 +380,6 @@ struct OmissionTypeName {
 /// For example, matching "stringByAppendingString" to the type "NSString"
 /// would produce "ByAppendingString".
 StringRef matchLeadingTypeName(StringRef name, OmissionTypeName typeName);
-
-/// Scratch space used for returning a set of StringRefs.
-class StringScratchSpace {
-  llvm::BumpPtrAllocator Allocator;
-
-public:
-  StringRef copyString(StringRef string);
-};
 
 /// Describes a set of names with an inheritance relationship.
 class InheritedNameSet {

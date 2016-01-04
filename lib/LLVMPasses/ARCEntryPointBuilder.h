@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -21,7 +21,7 @@
 namespace swift {
 
 /// A class for building ARC entry points. It is a composition wrapper around an
-/// IRBuilder and a constant Cache. It can not be moved or copied. It is meant
+/// IRBuilder and a constant Cache. It cannot be moved or copied. It is meant
 /// to be created once and passed around by reference.
 class ARCEntryPointBuilder {
   using IRBuilder = llvm::IRBuilder<>;
@@ -165,7 +165,7 @@ private:
   /// getRetain - Return a callable function for swift_retain.
   Constant *getRetain() {
     if (Retain)
-      return Retain.get();;
+      return Retain.get();
     auto *ObjectPtrTy = getObjectPtrTy();
 
     auto &M = getModule();
@@ -180,7 +180,7 @@ private:
   /// getRelease - Return a callable function for swift_release.
   Constant *getRelease() {
     if (Release)
-      return Release.get();;
+      return Release.get();
     auto *ObjectPtrTy = getObjectPtrTy();
 
     auto &M = getModule();

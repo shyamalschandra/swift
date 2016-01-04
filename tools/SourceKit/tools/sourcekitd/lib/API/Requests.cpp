@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -667,6 +667,7 @@ public:
   ~SKIndexingConsumer() {
     assert(Cancelled ||
            (EntitiesStack.size() == 1 && DependenciesStack.size() == 1));
+    (void) Cancelled;
   }
 
   void failed(StringRef ErrDescription) override;
@@ -815,6 +816,7 @@ bool SKIndexingConsumer::recordRelatedEntity(const EntityInfo &Info) {
 bool SKIndexingConsumer::finishSourceEntity(UIdent Kind) {
   Entity &CurrEnt = EntitiesStack.back();
   assert(CurrEnt.Kind == Kind);
+  (void) CurrEnt;
   EntitiesStack.pop_back();
   return true;
 }
@@ -865,6 +867,7 @@ public:
   }
   ~SKDocConsumer() {
     assert(Cancelled || EntitiesStack.size() == 1);
+    (void) Cancelled;
   }
 
   sourcekitd_response_t createResponse() {
@@ -1036,6 +1039,7 @@ bool SKDocConsumer::handleAvailableAttribute(const AvailableAttrInfo &Info) {
 bool SKDocConsumer::finishSourceEntity(UIdent Kind) {
   Entity &CurrEnt = EntitiesStack.back();
   assert(CurrEnt.Kind == Kind);
+  (void) CurrEnt;
   EntitiesStack.pop_back();
   return true;
 }
@@ -1125,8 +1129,8 @@ static void reportCursorInfo(StringRef Filename,
     }
     if (Info.IsSystem)
       Elem.setBool(KeyIsSystem, true);
-    if (!Info.TypeInteface.empty())
-      Elem.set(KeyTypeInterface, Info.TypeInteface);
+    if (!Info.TypeInterface.empty())
+      Elem.set(KeyTypeInterface, Info.TypeInterface);
 
     return Rec(RespBuilder.createResponse());
   });

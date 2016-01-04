@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -89,8 +89,9 @@ public:
   SILDebugLocation *createSILDebugLocation(SILLocation Loc) {
     // FIXME: Audit all uses and enable this assertion.
     // assert(getCurrentDebugScope() && "no debug scope");
-    return getOrCreateDebugLocation(Loc, getCurrentDebugScope()
-                                             ?: getFunction().getDebugScope());
+    auto Scope = getCurrentDebugScope();
+    return getOrCreateDebugLocation(Loc,
+                                Scope ? Scope : getFunction().getDebugScope());
   }
 
   //===--------------------------------------------------------------------===//
@@ -219,10 +220,11 @@ public:
   // SILInstruction Creation Methods
   //===--------------------------------------------------------------------===//
 
-  AllocStackInst *createAllocStack(SILLocation Loc, SILType elementType) {
+  AllocStackInst *createAllocStack(SILLocation Loc, SILType elementType,
+                                   SILDebugVariable Var = SILDebugVariable()) {
     Loc.markAsPrologue();
-    return insert(new (F.getModule()) AllocStackInst(
-        createSILDebugLocation(Loc), elementType, F));
+    return insert(AllocStackInst::create(createSILDebugLocation(Loc),
+                                         elementType, F, Var));
   }
 
   AllocRefInst *createAllocRef(SILLocation Loc, SILType elementType, bool objc,
@@ -249,10 +251,11 @@ public:
         createSILDebugLocation(Loc), valueType, operand));
   }
 
-  AllocBoxInst *createAllocBox(SILLocation Loc, SILType ElementType) {
+  AllocBoxInst *createAllocBox(SILLocation Loc, SILType ElementType,
+                               SILDebugVariable Var = SILDebugVariable()) {
     Loc.markAsPrologue();
-    return insert(new (F.getModule()) AllocBoxInst(createSILDebugLocation(Loc),
-                                                   ElementType, F));
+    return insert(
+        AllocBoxInst::create(createSILDebugLocation(Loc), ElementType, F, Var));
   }
 
   AllocExistentialBoxInst *
@@ -431,13 +434,17 @@ public:
     return insert(
         MarkFunctionEscapeInst::create(createSILDebugLocation(Loc), vars, F));
   }
-  DebugValueInst *createDebugValue(SILLocation Loc, SILValue src) {
-    return insert(new (F.getModule())
-                      DebugValueInst(createSILDebugLocation(Loc), src));
+
+  DebugValueInst *createDebugValue(SILLocation Loc, SILValue src,
+                                   SILDebugVariable Var = SILDebugVariable()) {
+    return insert(DebugValueInst::create(createSILDebugLocation(Loc), src,
+                                         F.getModule(), Var));
   }
-  DebugValueAddrInst *createDebugValueAddr(SILLocation Loc, SILValue src) {
-    return insert(new (F.getModule())
-                      DebugValueAddrInst(createSILDebugLocation(Loc), src));
+  DebugValueAddrInst *
+  createDebugValueAddr(SILLocation Loc, SILValue src,
+                       SILDebugVariable Var = SILDebugVariable()) {
+    return insert(DebugValueAddrInst::create(createSILDebugLocation(Loc), src,
+                                             F.getModule(), Var));
   }
 
   LoadWeakInst *createLoadWeak(SILLocation Loc, SILValue src, IsTake_t isTake) {
@@ -449,6 +456,20 @@ public:
                                  IsInitialization_t isInit) {
     return insert(new (F.getModule()) StoreWeakInst(createSILDebugLocation(Loc),
                                                     value, dest, isInit));
+  }
+
+  LoadUnownedInst *createLoadUnowned(SILLocation loc, SILValue src,
+                                     IsTake_t isTake) {
+    return insert(new (F.getModule())
+                    LoadUnownedInst(createSILDebugLocation(loc), src, isTake));
+  }
+
+  StoreUnownedInst *createStoreUnowned(SILLocation loc, SILValue value,
+                                       SILValue dest,
+                                       IsInitialization_t isInit) {
+    return insert(new (F.getModule())
+                    StoreUnownedInst(createSILDebugLocation(loc),
+                                     value, dest, isInit));
   }
 
   CopyAddrInst *createCopyAddr(SILLocation Loc, SILValue srcAddr,
@@ -990,11 +1011,6 @@ public:
     return insert(new (F.getModule())
                       StrongReleaseInst(createSILDebugLocation(Loc), Operand));
   }
-  StrongRetainAutoreleasedInst *
-  createStrongRetainAutoreleased(SILLocation Loc, SILValue Operand) {
-    return insert(new (F.getModule()) StrongRetainAutoreleasedInst(
-        createSILDebugLocation(Loc), Operand));
-  }
   StrongPinInst *createStrongPin(SILLocation Loc, SILValue Operand) {
     return insert(new (F.getModule())
                       StrongPinInst(createSILDebugLocation(Loc), Operand));
@@ -1161,12 +1177,6 @@ public:
 
   ReturnInst *createReturn(SILLocation Loc, SILValue ReturnValue) {
     return insertTerminator(new (F.getModule()) ReturnInst(
-        createSILDebugLocation(Loc), ReturnValue));
-  }
-
-  AutoreleaseReturnInst *createAutoreleaseReturn(SILLocation Loc,
-                                                 SILValue ReturnValue) {
-    return insertTerminator(new (F.getModule()) AutoreleaseReturnInst(
         createSILDebugLocation(Loc), ReturnValue));
   }
 

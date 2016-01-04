@@ -1,8 +1,8 @@
-//===--- ASTSectionImporter.cpp - Import AST Section Modules ---*- C++ -*--===//
+//===--- ASTSectionImporter.h - Import AST Section Modules -----*- C++ -*--===//
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -23,12 +23,12 @@
 namespace swift {
   class SerializedModuleLoader;
 
-  /// \brief Povided a memory buffer with an entire Mach-O __apple_ast
+  /// \brief Provided a memory buffer with an entire Mach-O __apple_ast
   /// section, this function makes memory buffer copies of all swift
   /// modules found in it and registers them using
   /// registerMemoryBuffer() so they can be found by loadModule(). The
-  /// the access path of all modules found in the section is appended
-  /// to the vector foundModules.
+  /// access path of all modules found in the section is appended to
+  /// the vector foundModules.
   /// \return true if successful.
   bool parseASTSection(SerializedModuleLoader* SML, StringRef Data,
                        SmallVectorImpl<std::string> &foundModules);

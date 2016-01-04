@@ -1,4 +1,4 @@
-// RUN: %target-swift-frontend -parse-as-library -emit-silgen -primary-file %s | FileCheck %s
+// RUN: %target-swift-frontend -use-native-super-method -parse-as-library -emit-silgen -primary-file %s | FileCheck %s
 
 struct Buh<T> {
   var x: Int {
@@ -354,7 +354,7 @@ func logical_lvalue_lifetime(r: RefWithProp, _ i: Int, _ v: Val) {
   r.int_prop = i
   // CHECK: [[R1:%[0-9]+]] = load [[RADDR]]
   // CHECK: strong_retain [[R1]]
-  // CHECK: [[SETTER_METHOD:%[0-9]+]] = class_method {{.*}} : $RefWithProp, #RefWithProp.int_prop!setter.1 : RefWithProp -> (Int) -> () , $@convention(method) (Int, @guaranteed RefWithProp) -> ()
+  // CHECK: [[SETTER_METHOD:%[0-9]+]] = class_method {{.*}} : $RefWithProp, #RefWithProp.int_prop!setter.1 : (RefWithProp) -> (Int) -> () , $@convention(method) (Int, @guaranteed RefWithProp) -> ()
   // CHECK: apply [[SETTER_METHOD]]({{.*}}, [[R1]])
   // CHECK: strong_release [[R1]]
 
@@ -624,7 +624,7 @@ class D : B {
     super.init(y: y)
     // CHECK: [[THIS1:%[0-9]+]] = load [[THISADDR]]
     // CHECK: [[THIS1_SUP:%[0-9]+]] = upcast [[THIS1]] : ${{.*}} to $B
-    // CHECK: [[SUPER_CTOR:%[0-9]+]] = function_ref @_TFC8lifetime1Bc{{.*}}
+    // CHECK: [[SUPER_CTOR:%[0-9]+]] = super_method %12 : $D, #B.init!initializer.1
     // CHECK: [[Y:%[0-9]+]] = load [[YADDR]]
     // CHECK: [[THIS2_SUP:%[0-9]+]] = apply [[SUPER_CTOR]]([[Y]], [[THIS1_SUP]])
     // CHECK: [[THIS2:%[0-9]+]] = unchecked_ref_cast [[THIS2_SUP]] : $B to $D

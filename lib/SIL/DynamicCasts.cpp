@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -400,7 +400,7 @@ swift::classifyDynamicCast(Module *M,
 
   // FIXME: tuple conversions?
 
-  // FIXME: Be more careful with briding conversions from
+  // FIXME: Be more careful with bridging conversions from
   // NSArray, NSDictionary and NSSet as they may fail?
 
   // Check if there might be a bridging conversion.
@@ -591,7 +591,7 @@ namespace {
       // FIXME: Upcasts between existential metatypes are not handled yet.
       // We should generate for it:
       // %openedSrcMetatype = open_existential srcMetatype
-      // init_existental dstMetatype, %openedSrcMetatype
+      // init_existential dstMetatype, %openedSrcMetatype
       auto &srcTL = getTypeLowering(source.Value.getType());
       SILValue value;
       if (source.isAddress()) {

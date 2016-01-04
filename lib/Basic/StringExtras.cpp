@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift.org open source project
 //
-// Copyright (c) 2014 - 2015 Apple Inc. and the Swift project authors
+// Copyright (c) 2014 - 2016 Apple Inc. and the Swift project authors
 // Licensed under Apache License v2.0 with Runtime Library Exception
 //
 // See http://swift.org/LICENSE.txt for license information
@@ -26,6 +26,13 @@
 
 using namespace swift;
 using namespace camel_case;
+
+bool swift::canBeArgumentLabel(StringRef identifier) {
+  if (identifier == "var" || identifier == "let" || identifier == "inout")
+    return false;
+
+  return true;
+}
 
 PrepositionKind swift::getPrepositionKind(StringRef word) {
 #define DIRECTIONAL_PREPOSITION(Word)           \
@@ -309,10 +316,16 @@ static bool isKeyword(StringRef identifier) {
 static Optional<StringRef> skipTypeSuffix(StringRef typeName) {
   if (typeName.empty()) return None;
 
+  auto lastWord = camel_case::getLastWord(typeName);
+
   // "Type" suffix.
-  if (camel_case::getLastWord(typeName) == "Type" &&
-      typeName.size() > 4) {
+  if (lastWord == "Type" && typeName.size() > 4) {
     return typeName.drop_back(4);
+  }
+
+  // "Ref" suffix.
+  if (lastWord == "Ref" && typeName.size() > 3) {
+    return typeName.drop_back(3);
   }
 
   // \d+D for dimensionality.
@@ -436,9 +449,10 @@ bool InheritedNameSet::contains(StringRef name) const {
 }
 
 /// Wrapper for camel_case::toLowercaseWord that uses string scratch space.
-static StringRef toLowercaseWord(StringRef string, StringScratchSpace &scratch){
+StringRef camel_case::toLowercaseWord(StringRef string,
+                                      StringScratchSpace &scratch){
   llvm::SmallString<32> scratchStr;
-  StringRef result = camel_case::toLowercaseWord(string, scratchStr);
+  StringRef result = toLowercaseWord(string, scratchStr);
   if (string == result)
     return string;
 
